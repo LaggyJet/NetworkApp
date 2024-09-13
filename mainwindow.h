@@ -5,19 +5,25 @@
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
-class MainWindow;
+    class MainWindow;
 }
 QT_END_NAMESPACE
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
-public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    public:
+        MainWindow(QWidget *parent = nullptr);
+        ~MainWindow();
+        void CloseApp();
 
-private:
-    Ui::MainWindow *ui;
+    private:
+        Ui::MainWindow *ui;
+        bool isDarkMode = true;
+        void ResizeButtons();
+        void ToggleBackgroundColor();
+        void LoadStyleSheet(const QString &filename);
+        void resizeEvent(QResizeEvent *event);
 };
+
 #endif // MAINWINDOW_H

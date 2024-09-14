@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "hostuser.h"
+#include "clientuser.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -15,15 +17,26 @@ class MainWindow : public QMainWindow {
     public:
         MainWindow(QWidget *parent = nullptr);
         ~MainWindow();
-        void CloseApp();
+
+    protected:
+        void resizeEvent(QResizeEvent *event) override;
+
+    private slots:
+        void MainPageRegister();
+        void MainPageLogin();
+        void RegisterPageButton();
+        void LoginPageButton();
+        void onNewClientConnected();
+        void onClientDisconnected();
+        void onDataReceived(const QString &data);
+        void onErrorOccurred(const QString &error);
 
     private:
         Ui::MainWindow *ui;
-        bool isDarkMode = true;
-        void ResizeButtons();
+        HostUser *hostUser;
+        ClientUser *clientUser;
+        bool isDarkMode;
+        void LoadStyleSheet(const QString &fileName);
         void ToggleBackgroundColor();
-        void LoadStyleSheet(const QString &filename);
-        void resizeEvent(QResizeEvent *event);
 };
-
 #endif // MAINWINDOW_H

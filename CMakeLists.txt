@@ -9,7 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
 set(PROJECT_SOURCES
@@ -17,7 +17,11 @@ set(PROJECT_SOURCES
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
-    resources.qrc   
+    clientuser.h
+    clientuser.cpp
+    hostuser.h
+    hostuser.cpp
+    resources.qrc
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -34,7 +38,7 @@ else()
         add_executable(NetworkApp
             ${PROJECT_SOURCES}
         )
-        qt5_add_resources(NetworkApp "resources"
+        qt6_add_resources(NetworkApp "resources"
             ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
         )
     endif()
@@ -50,11 +54,12 @@ if(WIN32)
     set_target_properties(NetworkApp PROPERTIES
         WIN32_EXECUTABLE TRUE
     )
+    target_link_libraries(NetworkApp PRIVATE Ws2_32)
 endif()
 
 include(GNUInstallDirs)
 install(TARGETS NetworkApp
-    BUNDLE DESTINATION .
+    BUNDLE DESTINATION . 
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

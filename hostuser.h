@@ -4,7 +4,7 @@
 #include <QObject>
 #include <winsock2.h>
 #include <vector>
-#include <QSocketNotifier>
+#include <QTimer>
 
 class HostUser : public QObject {
     Q_OBJECT
@@ -21,14 +21,14 @@ class HostUser : public QObject {
         void DataReceived(const QString &data);
 
     private slots:
-        void OnClientConnected();
-        void OnClientDataReady(int socketDescriptor);
+        void CheckForConnections();
+        void CheckForClientData();
 
     private:
         SOCKET listeningSocket;
         std::vector<SOCKET> clients;
-        QSocketNotifier *acceptNotifier;
-        std::vector<QSocketNotifier*> clientNotifiers;
+        QTimer connectionCheckTimer;
+        QTimer dataCheckTimer;
 
         void ProcessIncomingData(SOCKET clientSocket);
         void ShutdownSocket(SOCKET &socket);

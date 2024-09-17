@@ -3,7 +3,6 @@
 
 ConnectSettingPopup::ConnectSettingPopup(QWidget *parent) : QWidget(parent), ui(new Ui::ConnectSettingPopup) {
     ui->setupUi(this);
-
     setWindowTitle("Connect Settings");
     setFixedSize(size());
     setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint);

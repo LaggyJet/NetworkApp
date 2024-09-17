@@ -11,28 +11,28 @@
 class ClientUser : public QObject {
     Q_OBJECT
 
-public:
-    explicit ClientUser(const QString &address, int port);
-    ~ClientUser();
+    public:
+        explicit ClientUser(const QString &address, int port);
+        ~ClientUser();
 
-    void Start();   
-    void Stop();   
-    void SendData(const char *data, int32_t length);
+        void Start();   
+        void Stop();   
+        void SendData(const char *data, int32_t length);
 
-signals:
-    void DataReceived(const QString &data);   
-    void ErrorOccurred(const QString &error); 
+    signals:
+        void DataReceived(const QString &data);   
+        void ErrorOccurred(const QString &error); 
 
-private:
-    SOCKET socket;
-    sockaddr_in serverAddr;
-    std::thread readThread;
-    std::mutex mtx;
-    bool running;
+    private:
+        SOCKET socket;
+        sockaddr_in serverAddr;
+        std::thread readThread;
+        std::mutex mtx;
+        bool running;
 
-    void ReadingThread();
-    bool ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize);
-    void ShutdownSocket();
+        void ReadingThread();
+        bool ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize);
+        void ShutdownSocket();
 };
 
 #endif // CLIENTUSER_H

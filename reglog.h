@@ -27,4 +27,5 @@ class RegLog : public QWidget {
         HostUser *hostUser;
         ClientUser *clientUser;
 };
+
 #endif // REGLOG_H

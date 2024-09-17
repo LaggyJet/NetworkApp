@@ -30,7 +30,6 @@ class AppScreen : public QMainWindow {
         void DataReceived(const QString &data);
         void ErrorOccurred(const QString &error);
         void ToggleBackgroundColor();
-
         void MessageBoxEnter();
         void SendMessageClicked();
 

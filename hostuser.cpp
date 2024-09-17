@@ -9,33 +9,27 @@ void HostUser::Start() {
         emit ErrorOccurred("Host is already running.");
         return;
     }
-
     listeningSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listeningSocket == INVALID_SOCKET) {
         emit ErrorOccurred("Socket creation failed");
         return;
     }
-
     u_long mode = 1;
     ioctlsocket(listeningSocket, FIONBIO, &mode);
-
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(port);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
-
     if (bind(listeningSocket, (sockaddr *)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
         emit ErrorOccurred("Bind failed: " + QString::number(WSAGetLastError()));
         ShutdownSocket(listeningSocket);
         return;
     }
-
     if (listen(listeningSocket, 15) == SOCKET_ERROR) {
         emit ErrorOccurred("Listen failed: " + QString::number(WSAGetLastError()));
         ShutdownSocket(listeningSocket);
         return;
     }
-
     running = false;
     clientHandlerThread = std::thread([this]() { while (!running) { HandleClients(); } });
     SendIPPort();
@@ -45,11 +39,9 @@ void HostUser::Stop() {
     running = true;
     if (clientHandlerThread.joinable())
         clientHandlerThread.join();
-
     for (SOCKET clientSocket : clients)
         ShutdownSocket(clientSocket);
     clients.clear();
-
     ShutdownSocket(listeningSocket);
 }
 
@@ -57,32 +49,26 @@ void HostUser::HandleClients() {
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(listeningSocket, &readfds);
-
     timeval timeout{0, 100000};
     if (::select(0, &readfds, NULL, NULL, &timeout) == SOCKET_ERROR) {
         emit ErrorOccurred("Select failed: " + QString::number(WSAGetLastError()));
         return;
     }
-
     if (FD_ISSET(listeningSocket, &readfds)) {
         sockaddr_in clientAddress;
         int addrlen = sizeof(clientAddress);
         SOCKET clientSocket = accept(listeningSocket, (sockaddr*)&clientAddress, &addrlen);
-
         if (clientSocket == INVALID_SOCKET) {
             emit ErrorOccurred("Accept failed: " + QString::number(WSAGetLastError()));
             return;
         }
-
         clients.push_back(clientSocket);
         emit DataReceived("Private - New client connected");
-
         QString fullMessage = QString("Welcome to the server!\nThe command character is: ") + QString(commandChar);
         std::string messageString = fullMessage.toStdString();
         const char* welcomeMessage = messageString.c_str();
         SendMessageToClient(clientSocket, welcomeMessage, strlen(welcomeMessage));
     }
-
     for (auto it = clients.begin(); it != clients.end();) {
         SOCKET clientSocket = *it;
         int response = ReceiveMessageFromClient(clientSocket);
@@ -93,9 +79,6 @@ void HostUser::HandleClients() {
         }
         else if (response == 1)
             ++it;
-        else if (response == 2) {
-
-        }
     }
 }
 
@@ -104,7 +87,6 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         emit ErrorOccurred("Socket is not connected");
         return 0;
     }
-
     char lengthByte;
     int bytesReceived = recv(clientSocket, &lengthByte, 1, 0);
     if (bytesReceived == SOCKET_ERROR) {
@@ -117,16 +99,13 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         }
         return 1; 
     }
-
     if (bytesReceived == 0)
         return 0;
-
     uint8_t messageLength = static_cast<uint8_t>(lengthByte);
     if (messageLength == 0 || messageLength > 255) {
         emit ErrorOccurred("Invalid message length");
         return 2;
     }
-
     char messageBuffer[256]; 
     int totalBytesRead = 0;
     while (totalBytesRead < messageLength) {
@@ -142,7 +121,6 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
             return 0;
         totalBytesRead += curByte;
     }
-
     QString data = QString::fromUtf8(messageBuffer, messageLength);
     if ((data.startsWith("regUser") || data.startsWith("logUser")) && clientUsernames.find(clientSocket) != clientUsernames.end()) {
         std::string logWarning = "Please sign out before trying to register or login";
@@ -174,19 +152,16 @@ void HostUser::SendMessageToClient(SOCKET clientSocket, const char *data, int32_
         emit ErrorOccurred("Invalid client socket");
         return;
     }
-
     if (length > 255 || length < 0) {
         emit ErrorOccurred("Invalid data size");
         return;
     }
-
     char lengthByte = static_cast<char>(length);
     int sentBytes = send(clientSocket, &lengthByte, 1, 0);
     if (sentBytes == SOCKET_ERROR) {
         emit ErrorOccurred("Failed to send length byte: " + QString::number(WSAGetLastError()));
         return;
     }
-
     int totalBytesSent = 0;
     while (totalBytesSent < length) {
         int bytesSent = send(clientSocket, data + totalBytesSent, length - totalBytesSent, 0);
@@ -197,7 +172,6 @@ void HostUser::SendMessageToClient(SOCKET clientSocket, const char *data, int32_
         totalBytesSent += bytesSent;
     }
 }
-
 
 void HostUser::ShutdownSocket(SOCKET &socket) {
     if (socket != INVALID_SOCKET) {
@@ -213,7 +187,6 @@ void HostUser::SendIPPort() {
     QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     bool foundIPv4 = false;
     bool foundIPv6 = false;
-
     for (const QHostAddress& address : addresses) {
         if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) {
             if (!foundIPv4) {
@@ -228,7 +201,6 @@ void HostUser::SendIPPort() {
             }
         }
     }
-
     if (!foundIPv4)
         ipv4Address = "No external IPv4 address found";
     if (!foundIPv6)
@@ -237,13 +209,11 @@ void HostUser::SendIPPort() {
     emit DataReceived(message);
 }
 
-
 void HostUser::SendGlobalMessage(const char *data, int32_t length) {
     if (data == nullptr || length <= 0) {
         emit ErrorOccurred("Invalid data or length");
         return;
     }
-
     for (SOCKET clientSocket : clients) {
         if (clientSocket == INVALID_SOCKET) {
             emit ErrorOccurred("Invalid client socket detected in clients list");
@@ -258,7 +228,6 @@ void HostUser::SendToOtherClients(SOCKET exSocket, const char *data, int32_t len
         emit ErrorOccurred("Invalid data or length");
         return;
     }
-
     for (SOCKET clientSocket : clients) {
         if (clientSocket == INVALID_SOCKET) {
             emit ErrorOccurred("Invalid client socket detected in clients list");
@@ -301,7 +270,6 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
                 break;
             }
         }
-
         if (usernameInUse)
             responseMessage = "Username is already in use by another client.";
         else {
@@ -309,7 +277,6 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
             responseMessage = "Logged in as: " + username.toStdString();
         }
     }
-
     if (clientSocket == INVALID_SOCKET)
         emit DataReceived(responseMessage.c_str());
     else

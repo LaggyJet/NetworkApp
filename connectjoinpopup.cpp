@@ -7,7 +7,6 @@ ConnectJoinPopup::ConnectJoinPopup(QWidget *parent) : QWidget(parent), ui(new Ui
     setFixedSize(size());
     setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint);
     setWindowModality(Qt::ApplicationModal);
-
     connect(ui->hostButton, &QPushButton::clicked, this, &ConnectJoinPopup::HostButtonClicked);
     connect(ui->connectButton, &QPushButton::clicked, this, &ConnectJoinPopup::ConnectButtonClicked);
 }

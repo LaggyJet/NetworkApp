@@ -12,11 +12,9 @@
 AppScreen::AppScreen(QWidget *parent): QMainWindow(parent), ui(new Ui::AppScreen), isDarkMode(true) {
     ui->setupUi(this);
     LoadStyleSheet(":/styles/darkmode.qss");
-
     ConnectJoinPopup *popup = new ConnectJoinPopup(this);
     connect(popup, &ConnectJoinPopup::ChoiceMade, this, &AppScreen::HandleConJoinChoice);
     popup->show();
-
     connect(ui->connectAction, &QAction::triggered, this, [this]() { HandleConJoinChoice("Connect"); });
     connect(ui->hostAction, &QAction::triggered, this, [this]() { HandleConJoinChoice("Host"); });
     connect(ui->disconnectAction, &QAction::triggered, this, [this]() { DisconnectActionTriggered(false); });
@@ -55,7 +53,6 @@ void AppScreen::DisconnectActionTriggered(bool forceClose) {
         QMessageBox::information(this, "Disconnect", "You can only disconnect once connected");
         return;
     }
-
     if (clientUser) {
         clientUser->Stop();
         if (clientThread) {
@@ -67,7 +64,6 @@ void AppScreen::DisconnectActionTriggered(bool forceClose) {
         delete clientUser;
         clientUser = nullptr;
     }
-
     if (hostUser) {
         hostUser->Stop();
         if (hostThread) {
@@ -79,7 +75,6 @@ void AppScreen::DisconnectActionTriggered(bool forceClose) {
         delete hostUser;
         hostUser = nullptr;
     }
-
     if (!forceClose)
         QMessageBox::information(this, "Disconnection", "You have disconnected from the current host");
 }
@@ -114,7 +109,6 @@ void AppScreen::HandleConnectSettings(const QString &ip, const uint16_t &port) {
         delete clientThread;
         clientThread = nullptr;
     }
-
     clientUser = new ClientUser(ip, port);
     clientThread = new std::thread([this]() { clientUser->Start(); });
     connect(clientUser, &ClientUser::DataReceived, this, &AppScreen::DataReceived, Qt::QueuedConnection);
@@ -132,7 +126,6 @@ void AppScreen::HandleHostSettings(const uint16_t &port, const uint16_t &chatCap
         delete hostThread;
         hostThread = nullptr;
     }
-
     hostUser = new HostUser(port, chatCap, commandChar);
     hostThread = new std::thread([this]() { hostUser->Start(); });
     connect(hostUser, &HostUser::DataReceived, this, &AppScreen::DataReceived);
@@ -146,7 +139,6 @@ void AppScreen::DataReceived(const QString &data) {
         if (data.startsWith(expectedMsg))
             cmdChar = data.at(data.length() - 1);
     }
-
 }
 
 void AppScreen::ErrorOccurred(const QString &error) { QMessageBox::critical(this, "Error", "Error: " + error); }
@@ -155,20 +147,21 @@ void AppScreen::MessageBoxEnter() { SendMessage(); }
 
 void AppScreen::SendMessageClicked() { SendMessage(); }
 
-
 void AppScreen::SendMessage() {
     QString message = ui->messageBox->text();
     if (message.isEmpty()) {
         QMessageBox::warning(this, "Empty Message", "You cannot send a blank message");
         return;
     }
-
-    if (message.at(0) == cmdChar) {
+    if (message.length() > 255) {
+        QMessageBox::warning(this, "Too Long Message", "Your message is too long");
+        return;
+    }
+    if (message.at(0) == cmdChar && message.length() != 1) {
         HandleCommand(message);
         ui->messageBox->clear();
         return;
     }
-
     ui->messagesField->appendPlainText("You - " + message);
     if (hostUser)
         message = "Host - " + ui->messageBox->text();
@@ -183,29 +176,21 @@ void AppScreen::SendMessage() {
 void AppScreen::HandleCommand(const QString &cmdMessage) {
     QStringList parts = cmdMessage.split(' ', Qt::SkipEmptyParts);
     QString cmd = parts[0].toLower();
-    cmd = cmd.removeFirst();
+    cmd = cmd.remove(0, 1);
     if (cmd == "help") {
         QString cmdList = "Commands for this server:\n" +
                           QString(cmdChar) + "help - shows the list of commands\n" +
                           QString(cmdChar) + "register (reg) - pulls up the register page to make an account\n" +
                           QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n";
-
         DataReceived(cmdList);
     }
-    else if (cmd == "register" || cmd == "reg") {
+    else if (cmd == "register" || cmd == "reg" || cmd == "login" || cmd == "log") {
+        QString action = (cmd == "register" || cmd == "reg") ? "Register" : "Login";
         RegLog *regLog;
         if (clientUser)
-            regLog = new RegLog(this, "Register", clientUser, nullptr);
+            regLog = new RegLog(this, action, clientUser, nullptr);
         else
-            regLog = new RegLog(this, "Register", nullptr, hostUser);
-        regLog->show();
-    }
-    else if (cmd == "login" || cmd == "log") {
-        RegLog *regLog;
-        if (clientUser)
-            regLog = new RegLog(this, "Login", clientUser, nullptr);
-        else
-            regLog = new RegLog(this, "Login", nullptr, hostUser);
+            regLog = new RegLog(this, action, nullptr, hostUser);
         regLog->show();
     }
     else

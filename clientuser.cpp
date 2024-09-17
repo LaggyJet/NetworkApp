@@ -6,7 +6,6 @@ ClientUser::ClientUser(const QString &address, int port) : socket(INVALID_SOCKET
         emit ErrorOccurred("Socket creation failed.");
         return;
     }
-
     serverAddr.sin_family =AF_INET;
     serverAddr.sin_port = htons(port);
     inet_pton(AF_INET, address.toStdString().c_str(), &serverAddr.sin_addr);
@@ -18,14 +17,12 @@ void ClientUser::Start() {
     if (running)
         return;
     running = true;
-
     if (::connect(socket, (sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         int errorCode = WSAGetLastError();
         emit ErrorOccurred("Connect failed: " + QString::number(errorCode));
         Stop();  
         return;
     }
-
     readThread = std::thread(&ClientUser::ReadingThread, this);
 }
 
@@ -35,7 +32,6 @@ void ClientUser::Stop() {
         if (!running) return;
         running = false;
     }
-
     if (readThread.joinable())
         readThread.join();
     ShutdownSocket();
@@ -48,10 +44,8 @@ void ClientUser::ReadingThread() {
             if (!running)
                 break;
         }
-
         QByteArray buffer(256, '\0');
         int messageLength = 0;
-
         if (ReadData(buffer.data(), buffer.size(), messageLength)) {
             if (messageLength > 0) {
                 QString message = QString::fromUtf8(buffer.data(), messageLength);
@@ -61,25 +55,21 @@ void ClientUser::ReadingThread() {
     }
 }
 
-
 void ClientUser::SendData(const char *data, int32_t length) {
     if (socket == INVALID_SOCKET) {
         emit ErrorOccurred("Socket is not connected");
         Stop();
         return;
     }
-
     if (length > 255 || length <= 0) {
         emit ErrorOccurred("Invalid data size");
         return;
     }
-
     char lengthByte = (char)length;
     if (send(socket, &lengthByte, 1, 0) == SOCKET_ERROR) {
         emit ErrorOccurred("Failed to send length byte: " + QString::number(WSAGetLastError()));
         return;
     }
-
     int totalSent = 0;
     while (totalSent < length) {
         int curByte = send(socket, data + totalSent, length - totalSent, 0);
@@ -97,7 +87,6 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
         Stop();
         return false;
     }
-
     char lengthByte;
     int bytesReceived = recv(socket, &lengthByte, 1, 0);
     if (bytesReceived == SOCKET_ERROR) {
@@ -111,14 +100,12 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
         ShutdownSocket();
         return false;
     }
-
     returnedMsgSize = lengthByte;
     int length = (int)lengthByte;
     if (length > size) {
         emit ErrorOccurred("Message too large to receive");
         return false;
     }
-
     int bytesRead = 0;
     while (bytesRead < length) {
         int curByte = recv(socket, buffer + bytesRead, length - bytesRead, 0);
@@ -132,7 +119,6 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
         }
         bytesRead += curByte;
     }
-
     return true;
 }
 

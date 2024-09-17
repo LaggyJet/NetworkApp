@@ -36,6 +36,13 @@
        <widget class="QLineEdit" name="port"/>
       </item>
       <item>
+       <widget class="QLabel" name="portWarning">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QLabel" name="chatCapacityLabel">
         <property name="text">
          <string>Chat Capacity</string>
@@ -44,6 +51,13 @@
       </item>
       <item>
        <widget class="QLineEdit" name="chatCapacity"/>
+      </item>
+      <item>
+       <widget class="QLabel" name="chatCapacityWarning">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
       </item>
       <item>
        <widget class="QLabel" name="commandCharLabel">
@@ -56,7 +70,7 @@
        <widget class="QLineEdit" name="commandChar"/>
       </item>
       <item>
-       <widget class="QLabel" name="warningsLabel">
+       <widget class="QLabel" name="commandCharWarning">
         <property name="text">
          <string/>
         </property>

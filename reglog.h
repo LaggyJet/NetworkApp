@@ -20,6 +20,7 @@ class RegLog : public QWidget {
     private slots:
         void RegisterButton();
         void LoginButton();
+        void ErrorCheckBeforeSend(bool enterUsed);
 
     private:
         Ui::RegLog *ui;

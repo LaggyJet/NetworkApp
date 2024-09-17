@@ -30,7 +30,7 @@ class HostUser : public QObject {
         int ReceiveMessageFromClient(SOCKET clientSocket);
         void SendMessageToClient(SOCKET clientSocket, const char *data, int32_t length);
         void ShutdownSocket(SOCKET &socket);
-        void SendIPPort();
+        void SendHostStartInfo();
         void SendToOtherClients(SOCKET exSocket, const char *data, int32_t length);
 
         std::unordered_map<QString, QString> users;

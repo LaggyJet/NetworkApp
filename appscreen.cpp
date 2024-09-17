@@ -157,7 +157,7 @@ void AppScreen::SendMessage() {
         QMessageBox::warning(this, "Too Long Message", "Your message is too long");
         return;
     }
-    if (message.at(0) == cmdChar && message.length() != 1) {
+    if ((message.at(0) == cmdChar || message.at(0) == '~') && message.length() != 1) {
         HandleCommand(message);
         ui->messageBox->clear();
         return;

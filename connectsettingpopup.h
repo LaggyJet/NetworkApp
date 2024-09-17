@@ -19,6 +19,7 @@ class ConnectSettingPopup : public QWidget {
 
     private slots:
         void ConfirmButtonClicked();
+        void ErrorCheckBeforeSend(bool enterUsed);
 
     private:
         Ui::ConnectSettingPopup *ui;

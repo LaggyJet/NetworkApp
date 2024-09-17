@@ -32,7 +32,7 @@ void HostUser::Start() {
     }
     running = false;
     clientHandlerThread = std::thread([this]() { while (!running) { HandleClients(); } });
-    SendIPPort();
+    SendHostStartInfo();
 }
 
 void HostUser::Stop() {
@@ -57,11 +57,26 @@ void HostUser::HandleClients() {
     if (FD_ISSET(listeningSocket, &readfds)) {
         sockaddr_in clientAddress;
         int addrlen = sizeof(clientAddress);
+        static bool hostRegedError = false;
         SOCKET clientSocket = accept(listeningSocket, (sockaddr*)&clientAddress, &addrlen);
         if (clientSocket == INVALID_SOCKET) {
             emit ErrorOccurred("Accept failed: " + QString::number(WSAGetLastError()));
             return;
         }
+        if (clientUsernames.size() == 0) {
+            if (!hostRegedError) {
+                emit ErrorOccurred("Accept failed: Register and Login before accepting clients");
+                hostRegedError = true;
+            }
+            QString errorMessage = "Connection denied: Server is not ready. Make sure the host is logged in before trying to join again";
+            std::string errorMsgString = errorMessage.toStdString();
+            const char* errorMsgCStr = errorMsgString.c_str();
+            SendMessageToClient(clientSocket, errorMsgCStr, strlen(errorMsgCStr));
+            ShutdownSocket(clientSocket);
+            return;
+        } 
+        else
+            hostRegedError = false;
         clients.push_back(clientSocket);
         emit DataReceived("Private - New client connected");
         QString fullMessage = QString("Welcome to the server!\nThe command character is: ") + QString(commandChar);
@@ -126,6 +141,10 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         std::string logWarning = "Please sign out before trying to register or login";
         SendMessageToClient(clientSocket, logWarning.c_str(), logWarning.size());
     }
+    else if ((data.startsWith("regUser") || data.startsWith("logUser")) && clientUsernames.find(clientSocket) == clientUsernames.end() && chatCap == clientUsernames.size() - 1) {
+        std::string logWarning = "Chat is currently full, try again later.";
+        SendMessageToClient(clientSocket, logWarning.c_str(), logWarning.size());
+    }
     else if (data.startsWith("regUser")) {
         QStringList args = data.split(' ');
         RegisterUser(clientSocket, args[1], args[2]);
@@ -181,7 +200,7 @@ void HostUser::ShutdownSocket(SOCKET &socket) {
     }
 }
 
-void HostUser::SendIPPort() {
+void HostUser::SendHostStartInfo() {
     QString ipv4Address = "N/A";
     QString ipv6Address = "N/A";
     QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
@@ -205,7 +224,8 @@ void HostUser::SendIPPort() {
         ipv4Address = "No external IPv4 address found";
     if (!foundIPv6)
         ipv6Address = "No external IPv6 address found";
-    QString message = QString("IPv4: %1\nIPv6: %2\nPort: %3").arg(ipv4Address).arg(ipv6Address).arg(port);
+    QString message = QString("IPv4: %1\nIPv6: %2\nPort: %3\n").arg(ipv4Address).arg(ipv6Address).arg(port);
+    message += "Make sure to register and login before allowing a client to connect using ~reg and ~log\n";
     emit DataReceived(message);
 }
 
@@ -256,9 +276,7 @@ void HostUser::RegisterUser(SOCKET clientSocket, const QString &username, const 
 
 void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QString &password) {
     std::string responseMessage;
-    if (chatCap == clientUsernames.size())
-        responseMessage = "Chat is currently full, try again later.";
-    else if (users.find(username) == users.end())
+    if (users.find(username) == users.end())
         responseMessage = "Username does not exist.";
     else if (users.at(username) != password)
         responseMessage = "Password is not correct, please try again.";

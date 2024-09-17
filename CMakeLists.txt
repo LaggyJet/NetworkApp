@@ -9,46 +9,42 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 set(PROJECT_SOURCES
     main.cpp
-    mainwindow.cpp
-    mainwindow.h
-    mainwindow.ui
+    reglog.cpp
+    reglog.h
+    reglog.ui
     clientuser.h
     clientuser.cpp
     hostuser.h
     hostuser.cpp
     resources.qrc
+    appscreen.h
+    appscreen.cpp
+    appscreen.ui
+    hostsettingpopup.h
+    hostsettingpopup.cpp
+    hostsettingpopup.ui
+    connectjoinpopup.h
+    connectjoinpopup.cpp
+    connectjoinpopup.ui
 )
 
-if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(NetworkApp
-        MANUAL_FINALIZATION
-        ${PROJECT_SOURCES}
-    )
-else()
-    if(ANDROID)
-        add_library(NetworkApp SHARED
-            ${PROJECT_SOURCES}
-        )
-    else()
-        add_executable(NetworkApp
-            ${PROJECT_SOURCES}
-        )
-        qt6_add_resources(NetworkApp "resources"
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-        )
-    endif()
-endif()
+qt_add_executable(NetworkApp
+    MANUAL_FINALIZATION
+    ${PROJECT_SOURCES}
+    connectsettingpopup.h connectsettingpopup.cpp connectsettingpopup.ui
+)
 
-target_link_libraries(NetworkApp PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+qt_add_resources(NetworkApp "resources"
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
+)
 
-if(${QT_VERSION_MAJOR} EQUAL 6)
-    qt_finalize_executable(NetworkApp)
-endif()
+target_link_libraries(NetworkApp PRIVATE Qt6::Widgets Qt6::Network)
+
+qt_finalize_executable(NetworkApp)
 
 if(WIN32)
     set_target_properties(NetworkApp PROPERTIES
@@ -59,7 +55,7 @@ endif()
 
 include(GNUInstallDirs)
 install(TARGETS NetworkApp
-    BUNDLE DESTINATION . 
+    BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

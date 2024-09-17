@@ -1,8 +1,127 @@
-QMainWindow { 
-    background-color: #2e2e2e; 
+QWidget {
+    background-color: #2e2e2e;
+    color: white;
+}
+
+QMainWindow {
+    background-color: #2e2e2e;
 }
 
 QPushButton {
     background-color: #4a4a4a;
     color: white;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    padding: 5px 10px;
+    transition: background-color 0.2s ease;
+}
+
+QPushButton:hover {
+    background-color: #5a5a5a;
+}
+
+QPushButton:pressed {
+    background-color: #6a6a6a;
+}
+
+QLineEdit {
+    background-color: #3a3a3a;
+    color: white;
+    border: 1px solid #4a4a4a;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+QPlainTextEdit {
+    background-color: #3a3a3a;
+    color: white;
+    border: 1px solid #4a4a4a;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+QTableWidget {
+    background-color: #2e2e2e;
+    color: white;
+    border: 1px solid #4a4a4a;
+}
+
+QTableWidget::item {
+    background-color: #3a3a3a;
+    border: 1px solid #4a4a4a;
+    padding: 5px;
+}
+
+QHeaderView::section {
+    background-color: #4a4a4a;
+    color: white;
+    padding: 5px;
+    border: 1px solid #3a3a3a;
+}
+
+QScrollBar:horizontal {
+    background: #2e2e2e;
+    height: 10px;
+}
+
+QScrollBar:vertical {
+    background: #2e2e2e;
+    width: 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #4a4a4a;
+}
+
+QScrollBar::handle:vertical {
+    background: #4a4a4a;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    background: #2e2e2e;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    background: #2e2e2e;
+}
+
+QMenuBar {
+    background-color: #2e2e2e;
+    color: white;
+}
+
+QMenuBar::item {
+    background-color: #2e2e2e;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+
+QMenuBar::item:selected {
+    background-color: #4a4a4a;
+}
+
+QMenuBar::item:pressed {
+    background-color: #6a6a6a;
+}
+
+QMenu {
+    background-color: #2e2e2e;
+    color: white;
+    border: 1px solid #4a4a4a;
+}
+
+QMenu::item {
+    background-color: #2e2e2e;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+
+QMenu::item:selected {
+    background-color: #4a4a4a;
+}
+
+QMenu::item:pressed {
+    background-color: #6a6a6a;
 }

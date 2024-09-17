@@ -1,102 +1,145 @@
 #include "clientuser.h"
-#include <ws2tcpip.h>
-#include <QMessageBox>
 
-ClientUser::ClientUser(QWidget* parent, const char* address, uint16_t port) : QWidget(parent), clientSocket(INVALID_SOCKET) {
-    clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (clientSocket == INVALID_SOCKET) {
-        HandleError("Socket creation failed");
+ClientUser::ClientUser(const QString &address, int port) : socket(INVALID_SOCKET), running(false) {
+    socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socket == INVALID_SOCKET) {
+        emit ErrorOccurred("Socket creation failed.");
         return;
     }
 
-    sockaddr_in server = {AF_INET, htons(port)};
-    if (inet_pton(AF_INET, address, &server.sin_addr) != 1) {
-        HandleError("Invalid Address");
-        return;
-    }
-
-    if (::connect(clientSocket, (sockaddr *)&server, sizeof(server)) != 0) {
-        HandleError("Connection failed");
-        return;
-    }
-
-    u_long mode = 1;
-    if (ioctlsocket(clientSocket, FIONBIO, &mode) != NO_ERROR) {
-        HandleError("Failed to set non-blocking mode");
-        return;
-    }
-
-    //TODO: Figure out which timers need to stay or not
-    QMessageBox::information(this, "Connection Established", "Successfully connected to the server.");
-
-    periodicMessageTimer.setInterval(5000);
-    connect(&periodicMessageTimer, &QTimer::timeout, this, &ClientUser::SendPeriodicMessage);
-    periodicMessageTimer.start();
-
-    cooldownTimer.setInterval(100);
-    connect(&cooldownTimer, &QTimer::timeout, this, &ClientUser::ReadData);
-    cooldownTimer.start();
+    serverAddr.sin_family =AF_INET;
+    serverAddr.sin_port = htons(port);
+    inet_pton(AF_INET, address.toStdString().c_str(), &serverAddr.sin_addr);
 }
 
-ClientUser::~ClientUser() {
-    if (clientSocket != INVALID_SOCKET)
-        ShutdownSocket();
-}
+ClientUser::~ClientUser() { Stop(); }
 
-void ClientUser::HandleError(const QString &message) { QMessageBox::critical(this, "Error", message); }
-
-void ClientUser::ShutdownSocket() {
-    if (clientSocket != INVALID_SOCKET) {
-        shutdown(clientSocket, SD_BOTH);
-        closesocket(clientSocket);
-        clientSocket = INVALID_SOCKET;
-    }
-}
-
-void ClientUser::ReadData() {
-    if (clientSocket == INVALID_SOCKET)
+void ClientUser::Start() {
+    if (running)
         return;
-    char buffer[1024] = {0};
-    int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesReceived > 0) {
-        buffer[bytesReceived] = '\0';
-        QMessageBox::information(this, "Data Received", QString::fromUtf8(buffer));
-    }
-    else {
+    running = true;
+
+    if (::connect(socket, (sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         int errorCode = WSAGetLastError();
-        if (errorCode == WSAEWOULDBLOCK) {} 
-        else if (errorCode == WSAECONNRESET) {
-            QMessageBox::information(this, "Connection Closed", "Server closed the connection.");
-            ShutdownSocket();
-        } 
-        else
-            HandleError("Receive failed: " + QString::number(errorCode));
+        emit ErrorOccurred("Connect failed: " + QString::number(errorCode));
+        Stop();  
+        return;
     }
+
+    readThread = std::thread(&ClientUser::ReadingThread, this);
 }
 
-void ClientUser::SendData() {
-    if (clientSocket == INVALID_SOCKET)
-        return;
-    if (!sendQueue.isEmpty()) {
-        QByteArray data = sendQueue.takeFirst();
-        if (send(clientSocket, data.constData(), data.size(), 0) == SOCKET_ERROR) {
-            int error = WSAGetLastError();
-            if (error == WSAEWOULDBLOCK)
-                sendQueue.prepend(data);
-            else
-                HandleError("Send failed: " + QString::number(error));
+void ClientUser::Stop() {
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!running) return;
+        running = false;
+    }
+
+    if (readThread.joinable())
+        readThread.join();
+    ShutdownSocket();
+}
+
+void ClientUser::ReadingThread() {
+    while (running) {
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            if (!running)
+                break;
+        }
+
+        QByteArray buffer(256, '\0');
+        int messageLength = 0;
+
+        if (ReadData(buffer.data(), buffer.size(), messageLength)) {
+            if (messageLength > 0) {
+                QString message = QString::fromUtf8(buffer.data(), messageLength);
+                QMetaObject::invokeMethod(this, "DataReceived", Qt::QueuedConnection, Q_ARG(QString, message));
+            }
         }
     }
 }
 
-void ClientUser::SendPeriodicMessage() {
-    if (clientSocket == INVALID_SOCKET)
-        return;
-    QByteArray data = "Periodic message from client";
-    if (data.size() > 0xFFFF) {
-        HandleError("Message size too large");
+
+void ClientUser::SendData(const char *data, int32_t length) {
+    if (socket == INVALID_SOCKET) {
+        emit ErrorOccurred("Socket is not connected");
+        Stop();
         return;
     }
-    if (send(clientSocket, data.constData(), data.size(), 0) == SOCKET_ERROR)
-        HandleError("Periodic send failed: " + QString::number(WSAGetLastError()));
+
+    if (length > 255 || length <= 0) {
+        emit ErrorOccurred("Invalid data size");
+        return;
+    }
+
+    char lengthByte = (char)length;
+    if (send(socket, &lengthByte, 1, 0) == SOCKET_ERROR) {
+        emit ErrorOccurred("Failed to send length byte: " + QString::number(WSAGetLastError()));
+        return;
+    }
+
+    int totalSent = 0;
+    while (totalSent < length) {
+        int curByte = send(socket, data + totalSent, length - totalSent, 0);
+        if (curByte == SOCKET_ERROR) {
+            emit ErrorOccurred("Failed to send data: " + QString::number(WSAGetLastError()));
+            return;
+        }
+        totalSent += curByte;
+    }
+}
+
+bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) {
+    if (socket == INVALID_SOCKET) {
+        emit ErrorOccurred("Socket is not connected");
+        Stop();
+        return false;
+    }
+
+    char lengthByte;
+    int bytesReceived = recv(socket, &lengthByte, 1, 0);
+    if (bytesReceived == SOCKET_ERROR) {
+        int errorCode = WSAGetLastError();
+        if (errorCode != WSAEINTR && errorCode != WSAECONNRESET)
+            emit ErrorOccurred("Failed to read length byte: " + QString::number(errorCode));
+        return false;
+    } 
+    else if (bytesReceived == 0) {
+        emit ErrorOccurred("Connection closed by server");
+        ShutdownSocket();
+        return false;
+    }
+
+    returnedMsgSize = lengthByte;
+    int length = (int)lengthByte;
+    if (length > size) {
+        emit ErrorOccurred("Message too large to receive");
+        return false;
+    }
+
+    int bytesRead = 0;
+    while (bytesRead < length) {
+        int curByte = recv(socket, buffer + bytesRead, length - bytesRead, 0);
+        if (curByte == SOCKET_ERROR) {
+            emit ErrorOccurred("Failed to read data: " + QString::number(WSAGetLastError()));
+            return false;
+        } else if (curByte == 0) {
+            emit ErrorOccurred("Connection closed by server");
+            ShutdownSocket();
+            return false;
+        }
+        bytesRead += curByte;
+    }
+
+    return true;
+}
+
+void ClientUser::ShutdownSocket() {
+    if (socket != INVALID_SOCKET) {
+        shutdown(socket, SD_BOTH);
+        closesocket(socket);
+        socket = INVALID_SOCKET;
+    }
 }

@@ -5,7 +5,6 @@
 #include <QString>
 #include <thread>
 #include <winsock2.h>
-#include <mutex>
 #include <ws2tcpip.h>
 
 class ClientUser : public QObject {
@@ -27,7 +26,6 @@ class ClientUser : public QObject {
         SOCKET socket;
         sockaddr_in serverAddr;
         std::thread readThread;
-        std::mutex mtx;
         bool running;
 
         void ReadingThread();

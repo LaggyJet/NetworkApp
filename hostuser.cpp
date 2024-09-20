@@ -50,7 +50,7 @@ void HostUser::HandleClients() {
     FD_ZERO(&readfds);
     FD_SET(listeningSocket, &readfds);
     timeval timeout{0, 100000};
-    if (::select(0, &readfds, NULL, NULL, &timeout) == SOCKET_ERROR) {
+    if (select(0, &readfds, NULL, NULL, &timeout) == SOCKET_ERROR) {
         emit ErrorOccurred("Select failed: " + QString::number(WSAGetLastError()));
         return;
     }
@@ -68,13 +68,20 @@ void HostUser::HandleClients() {
                 emit ErrorOccurred("Accept failed: Register and Login before accepting clients");
                 hostRegedError = true;
             }
-            QString errorMessage = "Connection denied: Server is not ready. Make sure the host is logged in before trying to join again";
-            std::string errorMsgString = errorMessage.toStdString();
-            const char* errorMsgCStr = errorMsgString.c_str();
-            SendMessageToClient(clientSocket, errorMsgCStr, strlen(errorMsgCStr));
+            std::string errorMessage = "Connection denied: Server is not ready. Make sure the host is logged in before trying to join again";
+            SendMessageToClient(clientSocket, errorMessage.c_str(), errorMessage.size());
             ShutdownSocket(clientSocket);
             return;
-        } 
+        }
+        else if (chatCap == clientUsernames.size() - 1) {
+            if (!hostRegedError) {
+                emit ErrorOccurred("Accept failed: Server is full");
+                hostRegedError = true;
+            }
+            std::string logWarning = "Chat is currently full, try again later";
+            SendMessageToClient(clientSocket, logWarning.c_str(), logWarning.size());
+            ShutdownSocket(clientSocket);
+        }
         else
             hostRegedError = false;
         clients.push_back(clientSocket);
@@ -139,10 +146,6 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
     QString data = QString::fromUtf8(messageBuffer, messageLength);
     if ((data.startsWith("regUser") || data.startsWith("logUser")) && clientUsernames.find(clientSocket) != clientUsernames.end()) {
         std::string logWarning = "Please sign out before trying to register or login";
-        SendMessageToClient(clientSocket, logWarning.c_str(), logWarning.size());
-    }
-    else if ((data.startsWith("regUser") || data.startsWith("logUser")) && clientUsernames.find(clientSocket) == clientUsernames.end() && chatCap == clientUsernames.size() - 1) {
-        std::string logWarning = "Chat is currently full, try again later.";
         SendMessageToClient(clientSocket, logWarning.c_str(), logWarning.size());
     }
     else if (data.startsWith("regUser")) {
@@ -224,8 +227,7 @@ void HostUser::SendHostStartInfo() {
         ipv4Address = "No external IPv4 address found";
     if (!foundIPv6)
         ipv6Address = "No external IPv6 address found";
-    QString message = QString("IPv4: %1\nIPv6: %2\nPort: %3\n").arg(ipv4Address).arg(ipv6Address).arg(port);
-    message += "Make sure to register and login before allowing a client to connect using ~reg and ~log\n";
+    QString message = "IPv4: " + ipv4Address + "\nIPv6: " + ipv6Address +"\nPort: " + QString::number(port) + "\nMake sure to register and login before allowing a client to connect using ~reg and ~log\n";
     emit DataReceived(message);
 }
 

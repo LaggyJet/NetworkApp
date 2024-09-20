@@ -30,12 +30,15 @@ set(PROJECT_SOURCES
     connectjoinpopup.h
     connectjoinpopup.cpp
     connectjoinpopup.ui
+    connectsettingpopup.h
+    connectsettingpopup.cpp
+    connectsettingpopup.ui
 )
 
 qt_add_executable(NetworkApp
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
-    connectsettingpopup.h connectsettingpopup.cpp connectsettingpopup.ui
+
 )
 
 qt_add_resources(NetworkApp "resources"

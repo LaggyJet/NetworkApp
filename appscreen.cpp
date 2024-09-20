@@ -181,7 +181,11 @@ void AppScreen::HandleCommand(const QString &cmdMessage) {
         QString cmdList = "Commands for this server:\n" +
                           QString(cmdChar) + "help - shows the list of commands\n" +
                           QString(cmdChar) + "register (reg) - pulls up the register page to make an account\n" +
-                          QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n";
+                          QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n" +
+                          QString(cmdChar) + "logout - disconnects you from the server\n" +
+                          QString(cmdChar) + "getlist (glt) - sends a list of all active users in the chat\n" +
+                          QString(cmdChar) + "getlog (glg) - sends a lsit of all the public messages sent\n" +
+                          QString(cmdChar) + "send (dm) {user} {message} - sends a private message to the user typed\n";
         DataReceived(cmdList);
     }
     else if (cmd == "register" || cmd == "reg" || cmd == "login" || cmd == "log") {

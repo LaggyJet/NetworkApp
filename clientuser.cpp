@@ -6,7 +6,7 @@ ClientUser::ClientUser(const QString &address, int port) : socket(INVALID_SOCKET
         emit ErrorOccurred("Socket creation failed.");
         return;
     }
-    serverAddr.sin_family =AF_INET;
+    serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     inet_pton(AF_INET, address.toStdString().c_str(), &serverAddr.sin_addr);
 }
@@ -17,7 +17,7 @@ void ClientUser::Start() {
     if (running)
         return;
     running = true;
-    if (::connect(socket, (sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+    if (::connect(socket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         int errorCode = WSAGetLastError();
         emit ErrorOccurred("Connect failed: " + QString::number(errorCode));
         Stop();  
@@ -27,11 +27,9 @@ void ClientUser::Start() {
 }
 
 void ClientUser::Stop() {
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        if (!running) return;
-        running = false;
-    }
+    if (!running)
+        return;
+    running = false;
     if (readThread.joinable())
         readThread.join();
     ShutdownSocket();
@@ -39,19 +37,13 @@ void ClientUser::Stop() {
 
 void ClientUser::ReadingThread() {
     while (running) {
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-            if (!running)
-                break;
-        }
+        if (socket == INVALID_SOCKET)
+            break;
+
         QByteArray buffer(256, '\0');
         int messageLength = 0;
-        if (ReadData(buffer.data(), buffer.size(), messageLength)) {
-            if (messageLength > 0) {
-                QString message = QString::fromUtf8(buffer.data(), messageLength);
-                QMetaObject::invokeMethod(this, "DataReceived", Qt::QueuedConnection, Q_ARG(QString, message));
-            }
-        }
+        if (ReadData(buffer.data(), buffer.size(), messageLength) && messageLength > 0)
+            QMetaObject::invokeMethod(this, "DataReceived", Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(buffer.data(), messageLength)));
     }
 }
 

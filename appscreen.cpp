@@ -137,17 +137,66 @@ void AppScreen::DataReceived(const QString &data) {
         DisconnectActionTriggered(true);
         return;
     }
-    ui->messagesField->appendPlainText(data);
-    if (data.startsWith("Logged in as: ")) {
-        int curRow = ui->usersTable->rowCount();
-        ui->usersTable->insertRow(curRow);
-        QTableWidgetItem *usernameItem = new QTableWidgetItem(data.split("Logged in as: ")[1]);
-        usernameItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
-        ui->usersTable->setItem(curRow, 0, usernameItem);
-        QTableWidgetItem *statusItem = new QTableWidgetItem(hostUser ? "Host" : "Client");
-        statusItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
-        ui->usersTable->setItem(curRow, 1, statusItem);
+    if (data.startsWith("TabInit-")) {
+        QStringList users = data.mid(QString("TabInit-").length()).split(';', Qt::SkipEmptyParts);
+        ui->usersTable->setRowCount(0);
+        for (const QString &userEntry : users) {
+            QStringList userDetails = userEntry.split('\\');
+            if (userDetails.size() == 2) {
+                QString username = userDetails[0];
+                QString role = userDetails[1] == "host" ? "Host" : "Client";
+                int curRow = ui->usersTable->rowCount();
+                ui->usersTable->insertRow(curRow);
+                QTableWidgetItem *usernameItem = new QTableWidgetItem(username);
+                usernameItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                ui->usersTable->setItem(curRow, 0, usernameItem);
+                QTableWidgetItem *statusItem = new QTableWidgetItem(role);
+                statusItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                ui->usersTable->setItem(curRow, 1, statusItem);
+            }
+        }
+        ui->usersTable->sortItems(0, Qt::AscendingOrder);
+        return;
     }
+    else if (data.startsWith("TabAdd-")) {
+        QStringList userDetails = data.mid(QString("TabAdd-").length()).split('\\');
+        if (userDetails.size() != 2)
+            return;
+        QString username = userDetails[0];
+        QString role = userDetails[1];
+        bool userExists = false;
+        for (int row = 0; row < ui->usersTable->rowCount(); row++) {
+            QTableWidgetItem *item = ui->usersTable->item(row, 0);
+            if (item && item->text() == username) {
+                userExists = true;
+                break;
+            }
+        }
+        if (!userExists) {
+            int curRow = ui->usersTable->rowCount();
+            ui->usersTable->insertRow(curRow);
+            QTableWidgetItem *usernameItem = new QTableWidgetItem(username);
+            usernameItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+            ui->usersTable->setItem(curRow, 0, usernameItem);
+            QTableWidgetItem *statusItem = new QTableWidgetItem(role);
+            statusItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+            ui->usersTable->setItem(curRow, 1, statusItem);
+        }
+        ui->usersTable->sortItems(0, Qt::AscendingOrder);
+        return;
+    }
+    else if (data.startsWith("TabRem-")) {
+        QString username = data.mid(QString("TabRem-").length()).split('\\')[0];
+        for (int row = 0; row < ui->usersTable->rowCount(); row++) {
+            QTableWidgetItem *item = ui->usersTable->item(row, 0);
+            if (item && item->text() == username) {
+                ui->usersTable->removeRow(row);
+                break;
+            }
+        }
+        return;
+    }
+    ui->messagesField->appendPlainText(data);
     if (clientUser) {
         const QString expectedMsg = "Welcome to the server!\nThe command character is: ";
         if (data.startsWith(expectedMsg))

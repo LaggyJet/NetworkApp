@@ -32,6 +32,8 @@ class HostUser : public QObject {
         void ShutdownSocket(SOCKET &socket);
         void SendHostStartInfo();
         void SendToOtherClients(SOCKET exSocket, const char *data, int32_t length);
+        void SyncTableInit(SOCKET clientSocket);
+        void SyncTableAddRemove(const QString &username, bool isHost, bool removed);
 
         std::unordered_map<QString, QString> users;
         std::unordered_map<SOCKET, QString> clientUsernames;

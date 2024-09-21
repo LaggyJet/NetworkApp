@@ -90,15 +90,19 @@ void HostUser::HandleClients() {
         std::string messageString = fullMessage.toStdString();
         const char* welcomeMessage = messageString.c_str();
         SendMessageToClient(clientSocket, welcomeMessage, strlen(welcomeMessage));
+        SyncTableInit(clientSocket);
     }
     for (auto it = clients.begin(); it != clients.end();) {
         SOCKET clientSocket = *it;
         int response = ReceiveMessageFromClient(clientSocket);
         if (response == 0) {
-            QString msg = clientUsernames[clientSocket] + " disconnected";
-            emit DataReceived(msg);
-            SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
-            clientUsernames.erase(clientSocket);
+            if (clientUsernames[clientSocket] != "") {
+                QString msg = clientUsernames[clientSocket] + " disconnected from the server";
+                emit DataReceived(msg);
+                SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
+                SyncTableAddRemove(clientUsernames[clientSocket], false, true);
+                clientUsernames.erase(clientSocket);
+            }
             ShutdownSocket(clientSocket);
             it = clients.erase(it);
         }
@@ -191,7 +195,9 @@ void HostUser::SendMessageToClient(SOCKET clientSocket, const char *data, int32_
     while (totalBytesSent < length) {
         int bytesSent = send(clientSocket, data + totalBytesSent, length - totalBytesSent, 0);
         if (bytesSent == SOCKET_ERROR) {
-            emit DataReceived("Send failed: " + QString::number(WSAGetLastError()));
+            int errorCode = WSAGetLastError();
+            if (errorCode != WSAECONNABORTED)
+                emit DataReceived("Send failed: " + QString::number(errorCode));
             return;
         }
         totalBytesSent += bytesSent;
@@ -281,31 +287,81 @@ void HostUser::RegisterUser(SOCKET clientSocket, const QString &username, const 
 
 void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QString &password) {
     std::string responseMessage;
-    if (users.find(username) == users.end())
+    if (users.find(username) == users.end()) {
         responseMessage = "Username does not exist.";
-    else if (users.at(username) != password)
+        return;
+    }
+    else if (users.at(username) != password) {
         responseMessage = "Password is not correct, please try again.";
-    else {
-        bool usernameInUse = false;
-        for (const auto &pair : clientUsernames) {
-            if (pair.second == username) {
-                usernameInUse = true;
-                break;
-            }
-        }
-        if (usernameInUse)
-            responseMessage = "Username is already in use by another client.";
-        else {
-            clientUsernames[clientSocket] = username;
-            responseMessage = "Logged in as: " + username.toStdString();
+        return;
+    }
+    bool usernameInUse = false;
+    for (const auto &pair : clientUsernames) {
+        if (pair.second == username) {
+            usernameInUse = true;
+            break;
         }
     }
-    if (clientSocket == INVALID_SOCKET)
+    if (usernameInUse)
+        responseMessage = "Username is already in use by another client.";
+    else {
+        clientUsernames[clientSocket] = username;
+        responseMessage = "Logged in as: " + username.toStdString();
+    }
+    if (clientSocket == INVALID_SOCKET) {
         emit DataReceived(responseMessage.c_str());
+        SyncTableInit(clientSocket);
+    }
     else
         SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
 
-    QString msg = clientUsernames[clientSocket] + " connected";
+    QString msg = clientUsernames[clientSocket] + " connected to the server";
     emit DataReceived(msg);
     SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
+    SyncTableAddRemove(clientUsernames[clientSocket], false, false);
+}
+
+void HostUser::SyncTableInit(SOCKET clientSocket) {
+    std::string serializedData;
+    QString hostUsername;
+    for (const auto &pair : clientUsernames) {
+        if (pair.first == INVALID_SOCKET)
+            hostUsername = pair.second;
+        else
+            serializedData += pair.second.toStdString() + "\\client;";
+    }
+    if (!hostUsername.isEmpty())
+        serializedData = hostUsername.toStdString() + "\\host;" + serializedData;
+    const size_t maxChunkSize = 255 - 8;
+    std::vector<QString> chunks;
+    QString currentChunk = "TabInit-";
+    size_t currentChunkSize = currentChunk.size();
+    QString currentUsername;
+    for (size_t i = 0; i < serializedData.size(); ++i) {
+        currentUsername += serializedData[i];
+        if (serializedData[i] == ';') {
+            if (currentChunkSize + currentUsername.size() > maxChunkSize) {
+                chunks.push_back(currentChunk);
+                currentChunk = "TabInit-";
+                currentChunkSize = currentChunk.size();
+            }
+            currentChunk += currentUsername;
+            currentChunkSize += currentUsername.size();
+            currentUsername.clear();
+        }
+    }
+    if (!currentChunk.isEmpty())
+        chunks.push_back(currentChunk);
+    for (const auto &chunk : chunks) {
+        if (clientSocket == INVALID_SOCKET)
+            emit DataReceived(chunk);
+        else
+            SendMessageToClient(clientSocket, chunk.toStdString().c_str(), chunk.size());
+    }
+}
+
+void HostUser::SyncTableAddRemove(const QString &username, bool isHost, bool removed) {
+    QString msg = (removed ? "TabRem-" : "TabAdd-") + username + "\\" + (isHost ? "Host" : "Client");
+    emit DataReceived(msg);
+    SendGlobalMessage(msg.toStdString().c_str(), msg.size());
 }

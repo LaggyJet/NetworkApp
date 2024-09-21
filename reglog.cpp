@@ -53,6 +53,10 @@ void RegLog::ErrorCheckBeforeSend(bool enterUsed) {
         return;
     }
     if (regOrLog == "Register") {
+        if (ui->username->text().length() > 36) {
+            ui->regLogWarnings->setText("Username must be smaller than 36 characters");
+            return;
+        }
         if (ui->password->text().length() < 8) {
             ui->regLogWarnings->setText("Password must be 8 characters or longer");
             return;

@@ -65,7 +65,7 @@ void HostUser::HandleClients() {
         }
         if (clientUsernames.size() == 0) {
             if (!hostRegedError) {
-                emit ErrorOccurred("Accept failed: Register and Login before accepting clients");
+                emit DataReceived("Accept failed: Register and Login before accepting clients");
                 hostRegedError = true;
             }
             std::string errorMessage = "Connection denied: Server is not ready. Make sure the host is logged in before trying to join again";
@@ -75,7 +75,7 @@ void HostUser::HandleClients() {
         }
         else if (chatCap == clientUsernames.size() - 1) {
             if (!hostRegedError) {
-                emit ErrorOccurred("Accept failed: Server is full");
+                emit DataReceived("Accept failed: Server is full");
                 hostRegedError = true;
             }
             std::string logWarning = "Chat is currently full, try again later";
@@ -95,7 +95,10 @@ void HostUser::HandleClients() {
         SOCKET clientSocket = *it;
         int response = ReceiveMessageFromClient(clientSocket);
         if (response == 0) {
-            emit DataReceived("Private - Client disconnected");
+            QString msg = clientUsernames[clientSocket] + " disconnected";
+            emit DataReceived(msg);
+            SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
+            clientUsernames.erase(clientSocket);
             ShutdownSocket(clientSocket);
             it = clients.erase(it);
         }
@@ -116,7 +119,7 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         if (errorCode == WSAECONNRESET)
             return 0;
         else if (errorCode != WSAEWOULDBLOCK && errorCode != 0) {
-            emit ErrorOccurred("Failed to read message length: " + QString::number(errorCode));
+            emit DataReceived("Failed to read message length: " + QString::number(errorCode));
             return 2;
         }
         return 1; 
@@ -125,7 +128,7 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         return 0;
     uint8_t messageLength = static_cast<uint8_t>(lengthByte);
     if (messageLength == 0 || messageLength > 255) {
-        emit ErrorOccurred("Invalid message length");
+        emit DataReceived("Invalid message length");
         return 2;
     }
     char messageBuffer[256]; 
@@ -135,7 +138,7 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
         if (curByte == SOCKET_ERROR) {
             int errorCode = WSAGetLastError();
             if (errorCode != WSAEWOULDBLOCK) {
-                emit ErrorOccurred("Failed to read message content: " + QString::number(errorCode));
+                emit DataReceived("Failed to read message content: " + QString::number(errorCode));
                 return 2;
             }
         }
@@ -175,20 +178,20 @@ void HostUser::SendMessageToClient(SOCKET clientSocket, const char *data, int32_
         return;
     }
     if (length > 255 || length < 0) {
-        emit ErrorOccurred("Invalid data size");
+        emit DataReceived("Invalid data size");
         return;
     }
     char lengthByte = static_cast<char>(length);
     int sentBytes = send(clientSocket, &lengthByte, 1, 0);
     if (sentBytes == SOCKET_ERROR) {
-        emit ErrorOccurred("Failed to send length byte: " + QString::number(WSAGetLastError()));
+        emit DataReceived("Failed to send length byte: " + QString::number(WSAGetLastError()));
         return;
     }
     int totalBytesSent = 0;
     while (totalBytesSent < length) {
         int bytesSent = send(clientSocket, data + totalBytesSent, length - totalBytesSent, 0);
         if (bytesSent == SOCKET_ERROR) {
-            emit ErrorOccurred("Send failed: " + QString::number(WSAGetLastError()));
+            emit DataReceived("Send failed: " + QString::number(WSAGetLastError()));
             return;
         }
         totalBytesSent += bytesSent;
@@ -233,7 +236,7 @@ void HostUser::SendHostStartInfo() {
 
 void HostUser::SendGlobalMessage(const char *data, int32_t length) {
     if (data == nullptr || length <= 0) {
-        emit ErrorOccurred("Invalid data or length");
+        emit DataReceived("Invalid data or length");
         return;
     }
     for (SOCKET clientSocket : clients) {
@@ -247,7 +250,7 @@ void HostUser::SendGlobalMessage(const char *data, int32_t length) {
 
 void HostUser::SendToOtherClients(SOCKET exSocket, const char *data, int32_t length) {
     if (data == nullptr || length <= 0) {
-        emit ErrorOccurred("Invalid data or length");
+        emit DataReceived("Invalid data or length");
         return;
     }
     for (SOCKET clientSocket : clients) {
@@ -301,4 +304,8 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
         emit DataReceived(responseMessage.c_str());
     else
         SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
+
+    QString msg = clientUsernames[clientSocket] + " connected";
+    emit DataReceived(msg);
+    SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
 }

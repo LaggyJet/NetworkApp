@@ -53,30 +53,30 @@ void AppScreen::DisconnectActionTriggered(bool forceClose) {
         QMessageBox::information(this, "Disconnect", "You can only disconnect once connected");
         return;
     }
+    bool wasHost = (hostUser != nullptr);
     if (clientUser) {
         clientUser->Stop();
-        if (clientThread) {
-            if (clientThread->joinable())
-                clientThread->join();
-            delete clientThread;
-            clientThread = nullptr;
-        }
+        if (clientThread && clientThread->joinable())
+            clientThread->join();
+        delete clientThread;
+        clientThread = nullptr;
         delete clientUser;
         clientUser = nullptr;
     }
     if (hostUser) {
         hostUser->Stop();
-        if (hostThread) {
-            if (hostThread->joinable())
-                hostThread->join();
-            delete hostThread;
-            hostThread = nullptr;
-        }
+        if (hostThread && hostThread->joinable())
+            hostThread->join();
+        delete hostThread;
+        hostThread = nullptr;
         delete hostUser;
         hostUser = nullptr;
     }
+    ui->messagesField->clear();
+    for (int i = ui->usersTable->rowCount() - 1; i >= 0; --i)
+        ui->usersTable->removeRow(i);
     if (!forceClose)
-        QMessageBox::information(this, "Disconnection", "You have disconnected from the current host");
+        QMessageBox::information(this, "Disconnection", wasHost ? "You have shutdown the server" : "You have disconnected from the current host");
 }
 
 void AppScreen::ExitActionTriggered() {
@@ -133,7 +133,21 @@ void AppScreen::HandleHostSettings(const uint16_t &port, const uint16_t &chatCap
 }
 
 void AppScreen::DataReceived(const QString &data) {
+    if (data == "clsCon") {
+        DisconnectActionTriggered(true);
+        return;
+    }
     ui->messagesField->appendPlainText(data);
+    if (data.startsWith("Logged in as: ")) {
+        int curRow = ui->usersTable->rowCount();
+        ui->usersTable->insertRow(curRow);
+        QTableWidgetItem *usernameItem = new QTableWidgetItem(data.split("Logged in as: ")[1]);
+        usernameItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+        ui->usersTable->setItem(curRow, 0, usernameItem);
+        QTableWidgetItem *statusItem = new QTableWidgetItem(hostUser ? "Host" : "Client");
+        statusItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+        ui->usersTable->setItem(curRow, 1, statusItem);
+    }
     if (clientUser) {
         const QString expectedMsg = "Welcome to the server!\nThe command character is: ";
         if (data.startsWith(expectedMsg))
@@ -178,14 +192,14 @@ void AppScreen::HandleCommand(const QString &cmdMessage) {
     QString cmd = parts[0].toLower();
     cmd = cmd.remove(0, 1);
     if (cmd == "help") {
-        QString cmdList = "Commands for this server:\n" +
-                          QString(cmdChar) + "help - shows the list of commands\n" +
-                          QString(cmdChar) + "register (reg) - pulls up the register page to make an account\n" +
-                          QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n" +
-                          QString(cmdChar) + "logout - disconnects you from the server\n" +
-                          QString(cmdChar) + "getlist (glt) - sends a list of all active users in the chat\n" +
-                          QString(cmdChar) + "getlog (glg) - sends a lsit of all the public messages sent\n" +
-                          QString(cmdChar) + "send (dm) {user} {message} - sends a private message to the user typed\n";
+        QString cmdList =   "Commands for this server:\n" +
+                            QString(cmdChar) + "help - shows the list of commands\n" +
+                            QString(cmdChar) + "register (reg) - pulls up the register page to make an account\n" +
+                            QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n" +
+                            QString(cmdChar) + "logout - disconnects you from the server\n" +
+                            QString(cmdChar) + "getlist (glt) - sends a list of all active users in the chat\n" +
+                            QString(cmdChar) + "getlog (glg) - sends a lsit of all the public messages sent\n" +
+                            QString(cmdChar) + "send (dm) {user} {message} - sends a private message to the user typed\n";
         DataReceived(cmdList);
     }
     else if (cmd == "register" || cmd == "reg" || cmd == "login" || cmd == "log") {

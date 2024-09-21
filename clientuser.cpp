@@ -30,9 +30,9 @@ void ClientUser::Stop() {
     if (!running)
         return;
     running = false;
+    ShutdownSocket();
     if (readThread.joinable())
         readThread.join();
-    ShutdownSocket();
 }
 
 void ClientUser::ReadingThread() {
@@ -42,6 +42,8 @@ void ClientUser::ReadingThread() {
 
         QByteArray buffer(256, '\0');
         int messageLength = 0;
+        if (!running)
+            break;
         if (ReadData(buffer.data(), buffer.size(), messageLength) && messageLength > 0)
             QMetaObject::invokeMethod(this, "DataReceived", Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(buffer.data(), messageLength)));
     }
@@ -54,19 +56,19 @@ void ClientUser::SendData(const char *data, int32_t length) {
         return;
     }
     if (length > 255 || length <= 0) {
-        emit ErrorOccurred("Invalid data size");
+        emit DataReceived("Invalid data size");
         return;
     }
     char lengthByte = (char)length;
     if (send(socket, &lengthByte, 1, 0) == SOCKET_ERROR) {
-        emit ErrorOccurred("Failed to send length byte: " + QString::number(WSAGetLastError()));
+        emit DataReceived("Failed to send length byte: " + QString::number(WSAGetLastError()));
         return;
     }
     int totalSent = 0;
     while (totalSent < length) {
         int curByte = send(socket, data + totalSent, length - totalSent, 0);
         if (curByte == SOCKET_ERROR) {
-            emit ErrorOccurred("Failed to send data: " + QString::number(WSAGetLastError()));
+            emit DataReceived("Failed to send data: " + QString::number(WSAGetLastError()));
             return;
         }
         totalSent += curByte;
@@ -84,7 +86,7 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
     if (bytesReceived == SOCKET_ERROR) {
         int errorCode = WSAGetLastError();
         if (errorCode != WSAEINTR && errorCode != WSAECONNRESET)
-            emit ErrorOccurred("Failed to read length byte: " + QString::number(errorCode));
+            emit DataReceived("Failed to read length byte: " + QString::number(errorCode));
         return false;
     } 
     else if (bytesReceived == 0) {
@@ -95,14 +97,14 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
     returnedMsgSize = lengthByte;
     int length = (int)lengthByte;
     if (length > size) {
-        emit ErrorOccurred("Message too large to receive");
+        emit DataReceived("Message too large to receive");
         return false;
     }
     int bytesRead = 0;
     while (bytesRead < length) {
         int curByte = recv(socket, buffer + bytesRead, length - bytesRead, 0);
         if (curByte == SOCKET_ERROR) {
-            emit ErrorOccurred("Failed to read data: " + QString::number(WSAGetLastError()));
+            emit DataReceived("Failed to read data: " + QString::number(WSAGetLastError()));
             return false;
         } else if (curByte == 0) {
             emit ErrorOccurred("Connection closed by server");
@@ -119,5 +121,6 @@ void ClientUser::ShutdownSocket() {
         shutdown(socket, SD_BOTH);
         closesocket(socket);
         socket = INVALID_SOCKET;
+        emit DataReceived("clsCon");
     }
 }

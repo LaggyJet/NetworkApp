@@ -35,10 +35,11 @@ class AppScreen : public QMainWindow {
 
     private:
         Ui::AppScreen *ui;
-        bool isDarkMode;
+        bool isDarkMode, logMsg;
         std::thread *hostThread = nullptr, *clientThread = nullptr;
         HostUser *hostUser = nullptr;
         ClientUser *clientUser = nullptr;
+        QString username = "None";
         QChar cmdChar;
         void SendMessage();
         void LoadStyleSheet(const QString &fileName);

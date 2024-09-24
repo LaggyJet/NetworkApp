@@ -8,6 +8,7 @@
 #include "hostsettingpopup.h"
 #include "connectsettingpopup.h"
 #include "reglog.h"
+#include "logger.h"
 
 AppScreen::AppScreen(QWidget *parent): QMainWindow(parent), ui(new Ui::AppScreen), isDarkMode(true) {
     ui->setupUi(this);
@@ -137,6 +138,11 @@ void AppScreen::DataReceived(const QString &data) {
         DisconnectActionTriggered(true);
         return;
     }
+    if (data.startsWith("loggedUser-")) {
+        QString user = data;
+        username = user.remove("loggedUser-");
+        return;
+    }
     if (data.startsWith("TabInit-")) {
         QStringList users = data.mid(QString("TabInit-").length()).split(';', Qt::SkipEmptyParts);
         ui->usersTable->setRowCount(0);
@@ -229,11 +235,18 @@ void AppScreen::SendMessage() {
     if (hostUser)
         message = "Host - " + ui->messageBox->text();
     QByteArray bytes = message.toUtf8();
-    if (clientUser)
+    if (clientUser) {
         clientUser->SendData(bytes.data(), bytes.size());
+    }
     if (hostUser)
         hostUser->SendGlobalMessage(bytes.data(), bytes.size());
     ui->messageBox->clear();
+    if (clientUser) {
+        QString msg = "logMsg-" + message + "-" + username;
+        clientUser->SendData(msg.toStdString().c_str(), msg.size());
+    }
+    if (hostUser)
+        hostUser->LogMsg(message.mid(QString("Host - ").length()), username);
 }
 
 void AppScreen::HandleCommand(const QString &cmdMessage) {
@@ -246,7 +259,7 @@ void AppScreen::HandleCommand(const QString &cmdMessage) {
                             QString(cmdChar) + "register (reg) - pulls up the register page to make an account\n" +
                             QString(cmdChar) + "login (log) - allows you to login to a registered account on this server\n" +
                             QString(cmdChar) + "logout - disconnects you from the server\n" +
-                            QString(cmdChar) + "getlist (glt) - sends a list of all active users in the chat\n" +
+                            QString(cmdChar) + "getlist (glt) - sends a list of all users connected in the chat\n" +
                             QString(cmdChar) + "getlog (glg) - sends a lsit of all the public messages sent\n" +
                             QString(cmdChar) + "send (dm) {user} {message} - sends a private message to the user typed\n";
         DataReceived(cmdList);
@@ -260,8 +273,49 @@ void AppScreen::HandleCommand(const QString &cmdMessage) {
             regLog = new RegLog(this, action, nullptr, hostUser);
         regLog->show();
     }
-    else
+    else if (cmd == "logout")
+        DisconnectActionTriggered(false);
+    else if (cmd == "getlist" || cmd == "glt") {
+        QString users = "Current Users signed in:\n";
+        for (int row = 0; row < ui->usersTable->rowCount(); row++)
+            users += ui->usersTable->item(row, 0)->text() + "\n";
+        DataReceived(users);
+    }
+    else if (cmd == "getlog" || cmd == "glg") {
+        if (clientUser) {
+            const char *msg = "getLog";
+            clientUser->SendData(msg, strlen(msg));
+        }
+        else if (hostUser)
+            hostUser->GetLog(INVALID_SOCKET);
+    }
+    else if (cmd == "send" || cmd == "dm") {
+        int start = 2, end = parts.size() - 1;            
+        if (start < parts.size()) {
+            QString combined = parts.mid(start, end - start + 1).join(" ");
+            parts[start] = combined;
+            for (int i = end; i > start; --i)
+                parts.removeAt(i);
+        }
+        if (clientUser) {
+            QString message = "dmUser " + parts[1] + "\\" + parts[2];
+            QByteArray bytes = message.toUtf8();
+            clientUser->SendData(bytes.data(), bytes.size());
+        }
+        else if (hostUser) {
+            hostUser->SendDM(parts[1], parts[2], INVALID_SOCKET);
+        }
+    }
+    else {
         QMessageBox::warning(this, "Invalid command", cmd + " is not a valid command");
+        return;
+    }
+    if (clientUser) {
+        QString msg = "logCmd-" + cmdMessage + "-" + username;
+        clientUser->SendData(msg.toStdString().c_str(), msg.size());
+    }
+    if (hostUser)
+        hostUser->LogCmd(cmdMessage, username);
 }
 
 void AppScreen::ToggleBackgroundColor() {

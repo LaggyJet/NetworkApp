@@ -1,6 +1,7 @@
 #include "HostUser.h"
+#include "logger.h"
 
-HostUser::HostUser(uint16_t port, uint16_t chatCap, QChar commandChar, QObject *parent) : QObject(parent), port(port), chatCap(chatCap), commandChar(commandChar), listeningSocket(INVALID_SOCKET), running(false), users(), clientUsernames() {}
+HostUser::HostUser(uint16_t port, uint16_t chatCap, QChar commandChar) : port(port), chatCap(chatCap), commandChar(commandChar), listeningSocket(INVALID_SOCKET), running(false), users(), clientUsernames() {}
 
 HostUser::~HostUser() { Stop(); }
 
@@ -96,13 +97,13 @@ void HostUser::HandleClients() {
         SOCKET clientSocket = *it;
         int response = ReceiveMessageFromClient(clientSocket);
         if (response == 0) {
-            if (clientUsernames[clientSocket] != "") {
+            if (clientUsernames.find(clientSocket) != clientUsernames.end()) {
                 QString msg = clientUsernames[clientSocket] + " disconnected from the server";
                 emit DataReceived(msg);
                 SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
                 SyncTableAddRemove(clientUsernames[clientSocket], false, true);
-                clientUsernames.erase(clientSocket);
             }
+            clientUsernames.erase(clientSocket);
             ShutdownSocket(clientSocket);
             it = clients.erase(it);
         }
@@ -162,6 +163,21 @@ int HostUser::ReceiveMessageFromClient(SOCKET clientSocket) {
     else if (data.startsWith("logUser")) {
         QStringList args = data.split(' ');
         LoginUser(clientSocket, args[1], args[2]);
+    }
+    else if (data.startsWith("dmUser")) {
+        QStringList args = data.split("\\");
+        args[0].remove("dmUser ");
+        SendDM(args[0], args[1], clientSocket);
+    }
+    else if (data == "getLog")
+        GetLog(clientSocket);
+    else if (data.startsWith("logCmd-")) {
+        QStringList args = data.split("-");
+        LogCmd(args[1], args[2]);
+    }
+    else if (data.startsWith("logMsg-")) {
+        QStringList args = data.split("-");
+        LogMsg(args[1], args[2]);
     }
     else if (clientUsernames.find(clientSocket) == clientUsernames.end()) {
         std::string logWarning = "Please register and login before sending a message";
@@ -289,10 +305,12 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
     std::string responseMessage;
     if (users.find(username) == users.end()) {
         responseMessage = "Username does not exist.";
+        SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
         return;
     }
     else if (users.at(username) != password) {
         responseMessage = "Password is not correct, please try again.";
+        SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
         return;
     }
     bool usernameInUse = false;
@@ -302,8 +320,11 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
             break;
         }
     }
-    if (usernameInUse)
+    if (usernameInUse) {
         responseMessage = "Username is already in use by another client.";
+        SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
+        return;
+    }
     else {
         clientUsernames[clientSocket] = username;
         responseMessage = "Logged in as: " + username.toStdString();
@@ -314,11 +335,15 @@ void HostUser::LoginUser(SOCKET clientSocket, const QString &username, const QSt
     }
     else
         SendMessageToClient(clientSocket, responseMessage.c_str(), responseMessage.length());
-
     QString msg = clientUsernames[clientSocket] + " connected to the server";
     emit DataReceived(msg);
     SendToOtherClients(clientSocket, msg.toStdString().c_str(), msg.size());
     SyncTableAddRemove(clientUsernames[clientSocket], false, false);
+    std::string message = "loggedUser-" + clientUsernames[clientSocket].toStdString();
+    if (clientSocket == INVALID_SOCKET)
+        emit DataReceived(message.c_str());
+    else
+        SendMessageToClient(clientSocket, message.c_str(), message.size());
 }
 
 void HostUser::SyncTableInit(SOCKET clientSocket) {
@@ -364,4 +389,53 @@ void HostUser::SyncTableAddRemove(const QString &username, bool isHost, bool rem
     QString msg = (removed ? "TabRem-" : "TabAdd-") + username + "\\" + (isHost ? "Host" : "Client");
     emit DataReceived(msg);
     SendGlobalMessage(msg.toStdString().c_str(), msg.size());
+}
+
+void HostUser::SendDM(const QString &username, const QString &message, SOCKET msgSender) {
+    SOCKET user = INVALID_SOCKET;
+    for (const auto &pair : clientUsernames) {
+        if (pair.second == username) {
+            user = pair.first;
+            break;
+        }
+    }
+    if (user == INVALID_SOCKET) {
+        QString msg = "User was not found, make sure you spelt their username right.";
+        if (msgSender != INVALID_SOCKET)
+            SendMessageToClient(msgSender, msg.toStdString().c_str(), msg.size());
+        else
+            emit DataReceived(msg);
+        return;
+    }
+    QString msg = "From " + clientUsernames[msgSender] + " - " + message;
+    SendMessageToClient(user, msg.toStdString().c_str(), msg.size());
+}
+
+void HostUser::LogCmd(const QString &cmd, const QString &username) { Logger::GetInstance().Log(Logger::LogType::Command, cmd, username); }
+
+void HostUser::LogMsg(const QString &msg, const QString &username) { Logger::GetInstance().Log(Logger::LogType::Message, msg, username); }
+
+void HostUser::GetLog(SOCKET clientSocket) {
+    QString log = "\n\nStart of Chat History\n\n" + Logger::GetInstance().GetLog() + "\nEnd of Chat History\n\n";
+    const size_t maxChunkSize = 255;
+    std::vector<QString> chunks;
+    QString currentChunk;
+    size_t currentChunkSize = 0;
+    for (int i = 0; i < log.size(); ++i) {
+        currentChunk += log[i];
+        currentChunkSize++;
+        if (currentChunkSize >= maxChunkSize) {
+            chunks.push_back(currentChunk);
+            currentChunk.clear(); 
+            currentChunkSize = 0;
+        }
+    }
+    if (!currentChunk.isEmpty())
+        chunks.push_back(currentChunk);
+    for (const auto &chunk : chunks) {
+        if (clientSocket == INVALID_SOCKET)
+            emit DataReceived(chunk);
+        else
+            SendMessageToClient(clientSocket, chunk.toStdString().c_str(), chunk.size());
+    }
 }

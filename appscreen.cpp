@@ -8,7 +8,6 @@
 #include "hostsettingpopup.h"
 #include "connectsettingpopup.h"
 #include "reglog.h"
-#include "logger.h"
 
 AppScreen::AppScreen(QWidget *parent): QMainWindow(parent), ui(new Ui::AppScreen), isDarkMode(true) {
     ui->setupUi(this);
@@ -102,35 +101,42 @@ void AppScreen::HandleConJoinChoice(const QString &choice) {
 
 void AppScreen::HandleConnectSettings(const QString &ip, const uint16_t &port) {
     if (clientUser) {
+        disconnect(clientUser, &ClientUser::DataReceived, this, &AppScreen::DataReceived);
+        disconnect(clientUser, &ClientUser::ErrorOccurred, this, &AppScreen::ErrorOccurred);
         delete clientUser;
         clientUser = nullptr;
     }
+
     if (clientThread && clientThread->joinable()) {
         clientThread->join();
         delete clientThread;
         clientThread = nullptr;
     }
+
     clientUser = new ClientUser(ip, port);
-    clientThread = new std::thread([this]() { clientUser->Start(); });
     connect(clientUser, &ClientUser::DataReceived, this, &AppScreen::DataReceived, Qt::QueuedConnection);
     connect(clientUser, &ClientUser::ErrorOccurred, this, &AppScreen::ErrorOccurred);
+    clientThread = new std::thread([this]() { clientUser->Start(); });
 }
 
 void AppScreen::HandleHostSettings(const uint16_t &port, const uint16_t &chatCap, const QChar &commandChar) {
     cmdChar = commandChar;
     if (hostUser) {
+        disconnect(hostUser, &HostUser::DataReceived, this, &AppScreen::DataReceived);
+        disconnect(hostUser, &HostUser::ErrorOccurred, this, &AppScreen::ErrorOccurred);
         delete hostUser;
         hostUser = nullptr;
     }
+
     if (hostThread && hostThread->joinable()) {
         hostThread->join();
         delete hostThread;
         hostThread = nullptr;
     }
     hostUser = new HostUser(port, chatCap, commandChar);
-    hostThread = new std::thread([this]() { hostUser->Start(); });
-    connect(hostUser, &HostUser::DataReceived, this, &AppScreen::DataReceived);
+    connect(hostUser, &HostUser::DataReceived, this, &AppScreen::DataReceived, Qt::QueuedConnection);
     connect(hostUser, &HostUser::ErrorOccurred, this, &AppScreen::ErrorOccurred);
+    hostThread = new std::thread([this]() { hostUser->Start(); });
 }
 
 void AppScreen::DataReceived(const QString &data) {

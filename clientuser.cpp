@@ -1,4 +1,5 @@
 #include "clientuser.h"
+#include <QDebug>
 
 ClientUser::ClientUser(const QString &address, int port) : socket(INVALID_SOCKET), running(false) {
     socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -18,8 +19,7 @@ void ClientUser::Start() {
         return;
     running = true;
     if (::connect(socket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        int errorCode = WSAGetLastError();
-        emit ErrorOccurred("Connect failed: " + QString::number(errorCode));
+        emit ErrorOccurred("Connect failed: " + QString::number(WSAGetLastError()));
         Stop();  
         return;
     }
@@ -39,7 +39,6 @@ void ClientUser::ReadingThread() {
     while (running) {
         if (socket == INVALID_SOCKET)
             break;
-
         QByteArray buffer(256, '\0');
         int messageLength = 0;
         if (!running)
@@ -75,7 +74,7 @@ void ClientUser::SendData(const char *data, int32_t length) {
     }
 }
 
-bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) {
+bool ClientUser::ReadData(char* buffer, int32_t size, int32_t& returnedMsgSize) {
     if (socket == INVALID_SOCKET) {
         emit ErrorOccurred("Socket is not connected");
         Stop();
@@ -88,30 +87,31 @@ bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) 
         if (errorCode != WSAEINTR && errorCode != WSAECONNRESET)
             emit DataReceived("Failed to read length byte: " + QString::number(errorCode));
         return false;
-    } 
+    }
     else if (bytesReceived == 0) {
         emit ErrorOccurred("Connection closed by server");
         ShutdownSocket();
         return false;
     }
-    returnedMsgSize = lengthByte;
-    int length = (int)lengthByte;
-    if (length > size) {
+    int chunkSize = static_cast<unsigned char>(lengthByte);
+    returnedMsgSize = chunkSize;
+    if (chunkSize > size) {
         emit DataReceived("Message too large to receive");
         return false;
     }
     int bytesRead = 0;
-    while (bytesRead < length) {
-        int curByte = recv(socket, buffer + bytesRead, length - bytesRead, 0);
-        if (curByte == SOCKET_ERROR) {
+    while (bytesRead < chunkSize) {
+        int curBytes = recv(socket, buffer + bytesRead, chunkSize - bytesRead, 0);
+        if (curBytes == SOCKET_ERROR) {
             emit DataReceived("Failed to read data: " + QString::number(WSAGetLastError()));
             return false;
-        } else if (curByte == 0) {
+        }
+        else if (curBytes == 0) {
             emit ErrorOccurred("Connection closed by server");
             ShutdownSocket();
             return false;
         }
-        bytesRead += curByte;
+        bytesRead += curBytes;
     }
     return true;
 }

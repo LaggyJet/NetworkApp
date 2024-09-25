@@ -14,33 +14,29 @@ Logger::Logger() {
 }
 
 void Logger::Log(LogType logType, const QString &content, const QString &user) {
-    QDir logDir(QString("logs"));
+    QDir logDir("logs");
     if (!logDir.exists())
         logDir.mkpath(".");
-    QFile *curLogFile = new QFile(logDir.filePath((logType == Command) ? "commands.txt" : "messages.txt"));
-    if (!curLogFile->open(QIODevice::Append | QIODevice::Text)) {
-        qWarning() << "Failed to open log file: " << curLogFile->errorString();
-        delete curLogFile;
+    QString logFileName = (logType == Command) ? "commands.txt" : "messages.txt";
+    QFile logFile(logDir.filePath(logFileName));
+    if (!logFile.open(QIODevice::Append | QIODevice::Text)) {
+        qWarning() << "Failed to open log file: " << logFile.errorString();
         return;
     }
-    QTextStream out(curLogFile);
+    QTextStream out(&logFile);
     QString timestamp = QDateTime::currentDateTime().toString("MM-dd-yyyy hh:mm:ss");
     QString type = (logType == Command) ? "Command" : "Message";
     out << "[" << timestamp << "] User: " << user << "\t| " << type << ": " << content << "\n";
-    out.flush();
-    curLogFile->close();
-    delete curLogFile;
 }
 
 QString Logger::GetLog() {
-    QDir logDir(QString("logs"));
+    QDir logDir("logs");
     QFile logFile(logDir.filePath("messages.txt"));
     if (!logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qWarning() << "Failed to open log file: " << logFile.errorString();
-        return QString(); 
+        return QString();
     }
     QTextStream in(&logFile);
     QString logContent = in.readAll();
-    logFile.close();
     return logContent;
 }

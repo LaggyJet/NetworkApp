@@ -416,26 +416,33 @@ void HostUser::LogCmd(const QString &cmd, const QString &username) { Logger::Get
 void HostUser::LogMsg(const QString &msg, const QString &username) { Logger::GetInstance().Log(Logger::LogType::Message, msg, username); }
 
 void HostUser::GetLog(SOCKET clientSocket) {
-    QString log = "\n\nStart of Chat History\n\n" + Logger::GetInstance().GetLog() + "\nEnd of Chat History\n\n";
-    const size_t maxChunkSize = 255;
+    QString log = "Start of Chat History\n\n" + Logger::GetInstance().GetLog() + "\nEnd of Chat History\n\n";
+    const size_t maxChunkSize = 255; 
     std::vector<QString> chunks;
-    QString currentChunk;
-    size_t currentChunkSize = 0;
-    for (int i = 0; i < log.size(); ++i) {
-        currentChunk += log[i];
-        currentChunkSize++;
-        if (currentChunkSize >= maxChunkSize) {
-            chunks.push_back(currentChunk);
+    QString currentChunk; 
+    QStringList lines = log.split("\n"); 
+    size_t currentChunkSize = 0; 
+    for (const QString& line : lines) {
+        if (currentChunkSize + line.size() + 1 > maxChunkSize) { 
+            chunks.push_back(currentChunk); 
             currentChunk.clear(); 
             currentChunkSize = 0;
         }
+        if (!currentChunk.isEmpty()) {
+            currentChunk += "\n";
+            currentChunkSize++;
+        }
+        currentChunk += line;
+        currentChunkSize += line.size();
     }
     if (!currentChunk.isEmpty())
         chunks.push_back(currentChunk);
-    for (const auto &chunk : chunks) {
+    for (const auto& chunk : chunks) {
         if (clientSocket == INVALID_SOCKET)
-            emit DataReceived(chunk);
-        else
-            SendMessageToClient(clientSocket, chunk.toStdString().c_str(), chunk.size());
+            emit DataReceived(chunk); 
+        else {
+            QByteArray byteArray = chunk.toUtf8(); 
+            SendMessageToClient(clientSocket, byteArray.data(), byteArray.size());
+        }
     }
 }

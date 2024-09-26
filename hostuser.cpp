@@ -25,7 +25,7 @@ void HostUser::Start() {
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(port);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
-    if (bind(listeningSocket, (sockaddr *)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+    if (bind(listeningSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
         emit ErrorOccurred("Bind failed: " + QString::number(WSAGetLastError()));
         ShutdownSocket(listeningSocket);
         return;
@@ -85,7 +85,7 @@ void HostUser::HandleUDP() {
         broadcastAddr.sin_family = AF_INET;
         broadcastAddr.sin_port = htons(port);
         broadcastAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST); 
-        int sentBytes = sendto(udpSocket, broadcastMessage.c_str(), broadcastMessage.size(), 0, (sockaddr *)&broadcastAddr, sizeof(broadcastAddr));
+        int sentBytes = sendto(udpSocket, broadcastMessage.c_str(), broadcastMessage.size(), 0, (sockaddr*)&broadcastAddr, sizeof(broadcastAddr));
         if (sentBytes == SOCKET_ERROR)
             emit DataReceived("Failed to send UDP broadcast: " + QString::number(WSAGetLastError()));
         else

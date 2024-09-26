@@ -1,7 +1,7 @@
 #include "HostUser.h"
 #include "logger.h"
 
-HostUser::HostUser(uint16_t port, uint16_t chatCap, QChar commandChar) : port(port), chatCap(chatCap), commandChar(commandChar), listeningSocket(INVALID_SOCKET), running(false), users(), clientUsernames() {}
+HostUser::HostUser(uint16_t port, uint16_t chatCap, QChar commandChar) : port(port), chatCap(chatCap), commandChar(commandChar), listeningSocket(INVALID_SOCKET), udpSocket(INVALID_SOCKET), running(false), users(), clientUsernames(), lastUdpBroadcastTime(std::chrono::steady_clock::now()) {}
 
 HostUser::~HostUser() { Stop(); }
 
@@ -16,7 +16,11 @@ void HostUser::Start() {
         return;
     }
     u_long mode = 1;
-    ioctlsocket(listeningSocket, FIONBIO, &mode);
+    if (ioctlsocket(listeningSocket, FIONBIO, &mode) == SOCKET_ERROR) {
+        emit ErrorOccurred("Failed to set TCP socket to non-blocking mode: " + QString::number(WSAGetLastError()));
+        ShutdownSocket(listeningSocket);
+        return;
+    }
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(port);
@@ -31,19 +35,62 @@ void HostUser::Start() {
         ShutdownSocket(listeningSocket);
         return;
     }
-    running = false;
-    clientHandlerThread = std::thread([this]() { while (!running) { HandleClients(); } });
+    udpSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (udpSocket == INVALID_SOCKET) {
+        emit ErrorOccurred("UDP Socket creation failed");
+        ShutdownSocket(listeningSocket);
+        return;
+    }
+    bool broadcastEnabled = TRUE;
+    if (setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST, (char *)&broadcastEnabled, sizeof(broadcastEnabled)) == SOCKET_ERROR) {
+        emit ErrorOccurred("Failed to enable broadcast on UDP socket: " + QString::number(WSAGetLastError()));
+        ShutdownSocket(listeningSocket);
+        ShutdownSocket(udpSocket);
+        return;
+    }
+    if (bind(udpSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        emit ErrorOccurred("UDP Bind failed: " + QString::number(WSAGetLastError()));
+        ShutdownSocket(listeningSocket);
+        ShutdownSocket(udpSocket);
+        return;
+    }
+    if (ioctlsocket(udpSocket, FIONBIO, &mode) == SOCKET_ERROR) {
+        emit ErrorOccurred("Failed to set UDP socket to non-blocking mode: " + QString::number(WSAGetLastError()));
+        ShutdownSocket(listeningSocket);
+        ShutdownSocket(udpSocket);
+        return;
+    }
+    running = true; 
+    clientHandlerThread = std::thread([this]() { while (running) { HandleClients(); HandleUDP(); } });
     SendHostStartInfo();
 }
 
 void HostUser::Stop() {
-    running = true;
+    running = false;
     if (clientHandlerThread.joinable())
         clientHandlerThread.join();
     for (SOCKET clientSocket : clients)
         ShutdownSocket(clientSocket);
     clients.clear();
     ShutdownSocket(listeningSocket);
+    ShutdownSocket(udpSocket);
+}
+
+void HostUser::HandleUDP() {
+    auto currentTime = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed = currentTime - lastUdpBroadcastTime;
+    if (elapsed.count() >= 5.0) {
+        const std::string broadcastMessage = "Base UDP message from host.";
+        sockaddr_in broadcastAddr;
+        broadcastAddr.sin_family = AF_INET;
+        broadcastAddr.sin_port = htons(port);
+        broadcastAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST); 
+        int sentBytes = sendto(udpSocket, broadcastMessage.c_str(), broadcastMessage.size(), 0, (sockaddr *)&broadcastAddr, sizeof(broadcastAddr));
+        if (sentBytes == SOCKET_ERROR)
+            emit DataReceived("Failed to send UDP broadcast: " + QString::number(WSAGetLastError()));
+        else
+            lastUdpBroadcastTime = currentTime; 
+    }
 }
 
 void HostUser::HandleClients() {

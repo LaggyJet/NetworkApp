@@ -308,9 +308,8 @@ void AppScreen::HandleCommand(const QString &cmdMessage) {
             QByteArray bytes = message.toUtf8();
             clientUser->SendData(bytes.data(), bytes.size());
         }
-        else if (hostUser) {
+        else if (hostUser)
             hostUser->SendDM(parts[1], parts[2], INVALID_SOCKET);
-        }
     }
     else {
         QMessageBox::warning(this, "Invalid command", cmd + " is not a valid command");

@@ -1,10 +1,9 @@
 #include "clientuser.h"
-#include <QDebug>
 
 ClientUser::ClientUser(const QString &address, int port) : socket(INVALID_SOCKET), running(false) {
     socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (socket == INVALID_SOCKET) {
-        emit ErrorOccurred("Socket creation failed.");
+        emit ErrorOccurred("TCP Socket creation failed.");
         return;
     }
     serverAddr.sin_family = AF_INET;
@@ -20,7 +19,7 @@ void ClientUser::Start() {
     running = true;
     if (::connect(socket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         emit ErrorOccurred("Connect failed: " + QString::number(WSAGetLastError()));
-        Stop();  
+        Stop();
         return;
     }
     readThread = std::thread(&ClientUser::ReadingThread, this);
@@ -41,8 +40,6 @@ void ClientUser::ReadingThread() {
             break;
         QByteArray buffer(256, '\0');
         int messageLength = 0;
-        if (!running)
-            break;
         if (ReadData(buffer.data(), buffer.size(), messageLength) && messageLength > 0)
             QMetaObject::invokeMethod(this, "DataReceived", Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(buffer.data(), messageLength)));
     }
@@ -74,7 +71,7 @@ void ClientUser::SendData(const char *data, int32_t length) {
     }
 }
 
-bool ClientUser::ReadData(char* buffer, int32_t size, int32_t& returnedMsgSize) {
+bool ClientUser::ReadData(char *buffer, int32_t size, int32_t &returnedMsgSize) {
     if (socket == INVALID_SOCKET) {
         emit ErrorOccurred("Socket is not connected");
         Stop();

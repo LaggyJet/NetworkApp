@@ -31,6 +31,7 @@ class HostUser : public QObject {
 
     private:
         void HandleClients();
+        void HandleUDP();
         int ReceiveMessageFromClient(SOCKET clientSocket);
         void SendMessageToClient(SOCKET clientSocket, const char *data, int32_t length);
         void ShutdownSocket(SOCKET &socket);
@@ -43,10 +44,11 @@ class HostUser : public QObject {
         std::unordered_map<SOCKET, QString> clientUsernames;
         uint16_t port, chatCap;
         QChar commandChar;
-        SOCKET listeningSocket;
+        SOCKET listeningSocket, udpSocket;
         std::vector<SOCKET> clients;
         std::thread clientHandlerThread;
         bool running;
+        std::chrono::steady_clock::time_point lastUdpBroadcastTime;
 };
 
 #endif // HOSTUSER_H
